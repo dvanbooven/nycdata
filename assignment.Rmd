@@ -1,0 +1,125 @@
+---
+title: "NYC Shooting Data (Historic) Simple Analysis"
+author: "Random Student"
+date: "2023-06-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lubridate)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+## Introduction and Import Data
+
+Obtain the data from the Data.gov website for the NYC Shoting Incident Report (Historic).  The question that I am interested in here is to compare the 6 boroughs and look at the day/month of the shooting incidents to first classify the number of incidents, and second to see if there is a correlation between boroughs.
+
+Get the url and download into a data frame and summarize the initial import.  The data contained in the download includes a list of every shooting incident that occured in NYC going back to 2006 through the end of the previous calendar year.
+
+The data is reviewed by the Office of Management Analysis and Planning before being posted to the NYPD website.  Each incident contains location and time of occurrence as well as information related to subject and victim demographics.
+
+```{r reading_data}
+url <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+
+nyc_data <- read.csv(url)
+
+summary(nyc_data)
+```
+
+## Tidying and Cleaning up the data
+
+We are only interested in the date of the incident and the borough where the shooting took place so a bit of work needs to be done to clean up the final dataframe.
+
+```{r clean1 }
+# first convert character to Date in the data frame
+
+nyc_data$OCCUR_DATE <- as.Date(nyc_data$OCCUR_DATE, format = "%m/%d/%Y")
+
+nyc_clean <- data.frame(nyc_data$OCCUR_DATE, nyc_data$BORO, factor(weekdays(nyc_data$OCCUR_DATE)), months(nyc_data$OCCUR_DATE), format(nyc_data$OCCUR_DATE, format="%Y"))
+
+colnames(nyc_clean) = c("OCCUR_DATE", "BORO", "OCCUR_DAY", "OCCUR_MONTH", "OCCUR_YEAR")
+
+# now aggregate the data using dplyr in the tidyverse
+
+nyc_yearaggregate <- nyc_clean %>% group_by(BORO, OCCUR_YEAR) %>% tally()
+
+nyc_dayaggregate <- nyc_clean %>% group_by(BORO, OCCUR_DAY) %>% tally()
+
+nyc_monthaggregate <- nyc_clean %>% group_by(BORO, OCCUR_MONTH) %>% tally()
+
+nyc_aggregate <- nyc_clean %>% group_by(BORO, OCCUR_MONTH, OCCUR_DAY) %>% tally()
+
+```
+
+## Visualizations
+
+Here we are going to inspect the data first by running a timeline of occurrences, and then inspect the data 
+
+```{r visual }
+# first plot the data by year and color by borough.
+ggplot(nyc_yearaggregate, aes(x = OCCUR_YEAR, y = n, group=BORO, color=BORO)) + geom_line() + ggtitle("NYC Shootings over time from 2006 until 2022") + ylab("Number of shootings") + xlab("Year of Shooting")
+
+```
+
+From this first plot we can see a pretty big reduction in shootings in Brooklyn and the Bronx from 2012 to 2018, but then a sharp rise again in 2019.  Somewhat lesser reductions are seen in Queens and Manhattan, but again increased in 2019.  Staten Island remained consistent in the number of shootings over time.
+
+
+The second and third visualizations we'd like to see if there was an increase in shootings by a specific day or by a specific month.
+
+```{r visuala }
+# first plot the data by year and color by borough.
+
+nyc_dayaggregate$od <- factor(nyc_dayaggregate$OCCUR_DAY, levels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+
+ggplot(nyc_dayaggregate, aes(x = od, y = n, group = BORO, color = BORO)) + geom_line() + ggtitle("NYC Shootings by Day of the Week") + ylab("Number of Shootings") + xlab("Day of the week")
+
+
+```
+
+From the above plot we can see the increase in shooting incidents over the course of the weekend days Friday through Monday and a lower reduction from Tuesday through Thursday.  This isn't too surprising.
+
+```{r visualb }
+
+nyc_monthaggregate$om <- factor(nyc_monthaggregate$OCCUR_MONTH, levels = c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"))
+
+
+ggplot(nyc_monthaggregate, aes(x = om, y = n, group = BORO, color = BORO)) + geom_line() + ggtitle("NYC Shootings by Month") + ylab("Number of Shootings") + xlab("Month")
+
+
+```
+
+Here again not too surprising we see a sharp increase during the summer months and a reduction during the winter months.
+
+
+
+## Modeling
+
+Here we just want to do a very simple model to see if there is a correlation between the number of shootings and year of occurrence.  This would tell us if there is a linear relationship of the number of shootings over time or if there more of a random relationship between the number of shootings within a year.
+
+```{r model1 }
+
+fit.model.year <- lm(OCCUR_YEAR ~ n, nyc_yearaggregate)
+
+summary(fit.model.year)
+
+
+```
+
+From this you can see that there is a non significant p-value in both the F-statistic and the t-statistic showing that there is no linear relationship between number of shootings in a year and the year of occurrence.  This would suggest that there was no linear increase in shootings over a year time period.
+
+## Bias
+
+There are potential sources of bias inherit within the data.  First, this simply just took the number of shootings from within each borough, but to get a better idea of the crime rate a better analysis would have taken the per capita shootings and divided it by population.  That would have been a proper scale for the analysis.  Second, reported shootings decreased in years, and increased in others.  This doesn't get a feel for rationale behind such drops.  Third, the methodology for reporting shootings might incur some bias as to how the data was collected.  Was this reported by hospitals, law enforcement, or self reporting?  Do these sources provide reliable data collection or some hidden bias?  All of this is potentially biasing whatever analysis is performed on the data.
+
+
+## Supplemental
+
+These are the list of packages that were used in generating this report.
+```{r vars }
+
+sessionInfo()
+
+```
